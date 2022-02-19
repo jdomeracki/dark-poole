@@ -3,7 +3,7 @@ title: Dark Poole
 url: https://jdomeracki.github.io/jdomeracki.github.io
 paginate: 1
 paginate_path: "/dark-poole/page:num/"
-baseurl: "/jdomeracki.github.io"
+baseurl: "/dark-poole"
 permalink: pretty
 
 # Gems
