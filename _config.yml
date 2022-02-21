@@ -3,7 +3,7 @@ title: Semi-Professional Blog
 url: https://jdomeracki.github.io/jdomeracki.github.io
 paginate: 1
 paginate_path: "/page:num/"
-baseurl: "/"
+baseurl: ""
 permalink: pretty
 
 # Gems
