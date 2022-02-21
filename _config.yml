@@ -1,8 +1,8 @@
 # Setup
-title: Dark Poole
+title: Semi-Professional Blog
 url: https://jdomeracki.github.io/jdomeracki.github.io
 paginate: 1
-# paginate_path: "/dark-poole/page:num/"
+paginate_path: "/page:num/"
 baseurl: "/"
 permalink: pretty
 
@@ -33,9 +33,9 @@ sass:
 
 # Specify the author for blog posts
 author:
-  name: Mark Otto
-  url: https://twitter.com/mdo
-  email: markdotto@gmail.com
+  name: Jakub Domeracki
+  url: https://github.com/jdomeracki
+  email: jakub.domeracki@protonmail.com
 
 # Custom vars
 version: 3.0.0
@@ -43,7 +43,7 @@ version: 3.0.0
 # Navbar page list
 nav:
   - title: Blog
-    url: /dark-poole/archive
+    url: /archive
 
   - title: About
-    url: /dark-poole/about
+    url: /about
