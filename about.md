@@ -3,4 +3,4 @@ layout: page
 title: About
 ---
 
-Security engineering and more to come...
+A security engineering blog focused on Cloud [☁️] & DevSecOps [♾️]
