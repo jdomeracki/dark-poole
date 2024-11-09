@@ -2,12 +2,9 @@
 layout: default
 title: Archive
 ---
+{% assign media = site.baseurl | append: "assets/" | append:  include.post | replace: ".md","" | replace: "_posts/",""  %}
 
 # Archive
-
-<p align="center">
-  <img src="assets/android-chrome-512x512.png"  />
-</p>
 
 Browse all posts by month and year.
 
