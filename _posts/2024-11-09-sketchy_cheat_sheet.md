@@ -11,7 +11,6 @@ title: Sketchy Cheat Sheet - Story of a Cloud Architecture Diagramming Tool gone
     * [Hunting for the XSS](#hunting-for-the-xss)
     * [Proving exploitability](#proving-exploitability)
     * [Attack scenario diagram #1](#attack-scenario-diagram-1)
-    * [Nice catch!](#nice-catch!)
 - [Digging into the share links feature](#digging-into-the-share-links-feature)
     * [Firebase (in)secure storage](#firebase-insecure-storage)
     * [Firebase security rules](#firebase-security-rules)
@@ -41,7 +40,7 @@ This blogposts goes over the details of a responsible disclosure process which t
 
 Throughout this period, I've reported a series of vulnerabilities & misconfigurations in Google's [Architecture Diagramming Tool](https://github.com/priyankavergadia/google-cloud-4-words/blob/master/ADT/ADT%20User%20Guide%20-%20External.pdf) [^1]
 
-The severity of disclosed shortcomings & potential customer impact, resulted in said service getting quarantined 🚧 and ulitmately decommissioned in October 2024 [^2]
+The severity of disclosed shortcomings & potential customer impact, resulted in said service getting quarantined 🚧 and ultimately decommissioned in October 2024 [^2]
 
 <p align="center">
 <a href="https://googlecloudcheatsheet.withgoogle.com/architecture" target="_blank">
@@ -57,7 +56,7 @@ The views and opinions expressed do not necessarily reflect those of my employer
 ---
 
 # Unplanned Bug Bounty hunt
-It was a an early morning back in mid November 2023, when I decided that it's high time to prepare a diagram of a solution, that I was working on for quite some time at this point.
+It was an early morning back in mid November 2023, when I decided that it's high time to prepare a diagram of a solution that I was working on for quite some time at this point.
 
 As usual, I went ahead and opened my goto Diagramming Tool ie. [https://googlecloudcheatsheet.withgoogle.com/architecture](https://googlecloudcheatsheet.withgoogle.com/architecture)
 
@@ -69,9 +68,9 @@ As usual, I went ahead and opened my goto Diagramming Tool ie. [https://googlecl
 
 To my surprise, a [Sign-in](https://developers.google.com/identity/gsi/web/guides/overview) button welcomed me for the first time (at this point I was using this tool quite frequently for at least a year)
 
-Soon it became obvious that singinn in is not the only thing that changed in version `0.2.3`
+Soon it became obvious that signing in is not the only thing that changed in version **0.2.3**
 
-Some functionality like uploading diagrams to *Google Drive* stopped working while other features like `Generate Terraform` got intrudocued.
+Some functionality like uploading diagrams to *Google Drive* stopped working while other features like **_Generate Terraform_** got introduced.
 
 Quick check on Twitter quickly proved that indeed a new version was released:
 
@@ -83,21 +82,21 @@ Quick check on Twitter quickly proved that indeed a new version was released:
 
 When I picked a GCE VM resource the UI required the configuration fields to be populated and here's where the Bug Bounty hunt kicks in.
 
-The expression on my face, when I clicked on the `project` dropdown list must have been priceless as approx. **300 Project IDs** of the Organization that I work for got listed ready to be picked 😲
+The expression on my face, when I clicked on the _project_ dropdown list must have been priceless as approx. **300 Project IDs** of the Organization that I work for got listed ready to be picked 😲
 
-While in itself it might not seem like that big of a deal, I quickly realized that somehow this **third-party app can query my employeers GCP Org using my highly priviliged, post-MFA credentials**.
+While in itself it might not seem like that big of a deal, I quickly realized that somehow this **third-party app can query my employers GCP Org using my highly privileged, post-MFA credentials**.
 
-Having intregrated services with Google APIs many times before, it became apparent that somewhere in the Sign-in flow the app got a hold onto a sufficiently scoped OAuth [Access Token](https://cloud.google.com/docs/authentication/token-types#access).
+Having integrated services with Google APIs many times before, it became apparent that somewhere in the Sign-in flow the app got a hold onto a sufficiently scoped OAuth [Access Token](https://cloud.google.com/docs/authentication/token-types#access).
 
 
 ## Backtracking from impact to attack scenario
 
-At this point I got so intrigued that instead of focusing at the job at hand, I dediced to dig deeper based on potential impact if compromised.
+At this point I got so intrigued that instead of focusing on the job at hand, I decided to dig deeper based on potential impact if compromised.
 > A partially broken app + powerfull permissions does not mix well 💥
 
-First thing I had to check is how come this third-party application got without my explicit auathorization of such a grant.
+First thing I had to check is how come this third-party application got without my explicit authorization of such a grant.
 
-As showcased below the Sign-in page did not mention one bit, that any type of Google Cloud specififc [Access Scopes](https://developers.google.com/identity/protocols/oauth2/scopes) would be granted.
+As showcased below the Sign-in page did not mention one bit, that any type of Google Cloud specific [Access Scopes](https://developers.google.com/identity/protocols/oauth2/scopes) would be granted.
 
 <p align="center">
 <a href="https://storage.googleapis.com/sketchy_cheat_sheet/misleading_sign_in.png" target="_blank">
@@ -117,24 +116,26 @@ https://accounts.google.com/o/oauth2/v2/auth/oauthchooseaccount?gsiwebsdk=3&clie
 > Some of those query parameters are standard OAuth 2.0 while some are Google's idiosyncrasies.
 
 Let's take a closer look at the scopes reuqested by this application:
-`scope=openid%20profile%20email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform.read-only`
+```
+scope=openid%20profile%20email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform.read-only
+```
 
-Aside from typical `opeind+profile+email` the `cloud-platform.read-only` stood out.
+Aside from typical _opeind+profile+email_ the **_cloud-platform.read-only_** stood out.
 
-Not only is the recommended [incremental authorization](https://developers.google.com/identity/protocols/oauth2/web-server#incrementalAuth) not implemented - what's worse the user isn't event informed that they're about to grant read-only access to GCP (!)
+Not only is the recommended [incremental authorization](https://developers.google.com/identity/protocols/oauth2/web-server#incrementalAuth) not implemented - what's worse the user isn't even informed that they're about to grant read-only access to GCP (!)
 
-As it turned out, an [Access Token](https://cloud.google.com/docs/authentication/token-types#access) scoped with `cloud-platform.read-only` provided read-only access to **15 distinct Google Cloud APIs**, most notably:
+As it turned out, an [Access Token](https://cloud.google.com/docs/authentication/token-types#access) scoped with **_cloud-platform.read-only_** provided read-only access to **15 distinct Google Cloud APIs**, most notably:
 - [App Engine Admin API](https://developers.google.com/identity/protocols/oauth2/scopes#appengine)
 - [BigQuery API](https://developers.google.com/identity/protocols/oauth2/scopes#bigquery)
 - [Cloud Bigtable Admin API](https://developers.google.com/identity/protocols/oauth2/scopes#bigtableadmin)
 - [Cloud Storage JSON API](https://developers.google.com/identity/protocols/oauth2/scopes#storage)
 - [Cloud Resource Manager API](https://developers.google.com/identity/protocols/oauth2/scopes#cloudresourcemanager)
 
-I knew, that there were pretty much two viable options where the shortlived token could be stored:
+I knew, that there were pretty much two viable options were the short lived token could be stored:
 1. [localStorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)/[sessionStorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage)
 2. Set in a Cookie
 
-Quick check proved that option #2. was at play and what's important to note is that [HttpOnly](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#httponly) attribute was not set for the Cookie in question called `accessToken`.
+Quick check proved that option #2. was at play and what's important to note is that [HttpOnly](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#httponly) attribute was not set for the Cookie in question called _accessToken_.
 
 <p align="center">
 <a href="https://storage.googleapis.com/sketchy_cheat_sheet/access_token_cookie_params.png" target="_blank">
@@ -142,8 +143,8 @@ Quick check proved that option #2. was at play and what's important to note is t
 </a>
 </p>
 
-Those aro so call *opaque* tokens ie. their format is proprietary and can't be decoded.\
-In order to verify scopes granted one has to query Google OAuth 2.0 `tokeninfo` endpoint and that’s exactly what I did 👇
+Those are so called *opaque* tokens ie. their format is proprietary and can't be decoded.\
+In order to verify scopes granted one has to query Google OAuth 2.0 _tokeninfo_ endpoint and that’s exactly what I did 👇
 
 <p align="center">
 <a href="https://storage.googleapis.com/sketchy_cheat_sheet/access_token_scopes.png" target="_blank">
@@ -193,7 +194,7 @@ I knew that this diagramming tool is based on a widely popular Open Source proje
 
 Quick check showed that a "promising" [Security Advisory: GHSA-v7v8-gjv7-ffmr](https://github.com/advisories/GHSA-v7v8-gjv7-ffmr) & associated [CVE-2023-26140](https://nvd.nist.gov/vuln/detail/CVE-2023-26140) were published in Aug 2023.
 
-TL;DR Versions prior to `0.15.3` were vulnerable to a [stored XSS](https://portswigger.net/web-security/cross-site-scripting/stored) in the *embeddable links* feature.
+TL;DR Versions prior to _0.15.3_ were vulnerable to a [stored XSS](https://portswigger.net/web-security/cross-site-scripting/stored) in the *embeddable links* feature.
 
 The fix [PR](https://github.com/excalidraw/excalidraw/pull/6728) contained a full reproduction of the issue 👇
 
@@ -205,7 +206,7 @@ The fix [PR](https://github.com/excalidraw/excalidraw/pull/6728) contained a ful
 
 Let's take a closer look at the payload 🧐
 
-Paritally url-encoded:
+Partially url-encoded:
 ```
 javascript://%0aalert(document.domain)
 ```
@@ -225,7 +226,7 @@ Replicating the above was trivial:
 </a>
 </p>
 
-What I had at this point was a [self-xss](https://www.youtube.com/watch?v=j8CrJv0dTEc) which in iteslf could be viewed as a security issue but arguably unlikely to be exploitable in isolation.
+What I had at this point was a [self-xss](https://www.youtube.com/watch?v=j8CrJv0dTEc) which in itself could be viewed as a security issue but arguably unlikely to be exploitable in isolation.
 > 💡 **Tip:** There are some scenarios when where if chained with other minor issues / gadgets like [login & logout CSRF](https://labs.detectify.com/security-guidance/login-logout-csrf-time-to-reconsider/) could be impactful as showcased quite nicely in: https://whitton.io/articles/uber-turning-self-xss-into-good-xss/
 
 ## Proving exploitability
@@ -243,9 +244,9 @@ An attacker could simply prepare a malicious diagram and share it with the victi
 
 At this point there was nothing else left to do other than to actually provide a fully working PoC of the Access Token being stolen & sent to an attacker controlled endpoint.
 
-Since there were no defense in depth mechanisms eg. [CSP](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) in place, exploitation proved to be straighforward.
+Since there were no defense in depth mechanisms eg. [CSP](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) in place, exploitation proved to be straightforward.
 
-I ended up using a simple [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API) `POST` request which contained all the Cookies set for domain `.googlecloudcheatsheet.withgoogle.com` (including `accessToken`) exfiltrating them to a [Burp Collaborator](https://portswigger.net/burp/documentation/collaborator) subdomain I controlled.
+I ended up using a simple [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API) _POST_ request which contained all the Cookies set for domain _.googlecloudcheatsheet.withgoogle.com_ (including _accessToken_) exfiltrating them to a [Burp Collaborator](https://portswigger.net/burp/documentation/collaborator) subdomain I controlled.
 
 URL-decoded payload:
 ```js
@@ -260,7 +261,7 @@ Requests received by the server:
 </a>
 </p>
 
-> 📝 **Note:** If you feel like you've seen exactly such a technique being used before, it's likely because you completed one of the many great [PortSwigger Web Security Academy Lab](https://portswigger.net/web-security/cross-site-scripting/exploiting/lab-stealing-cookies#:~:text=Submit%20the%20following,public%20Collaborator%20server) scenarios - clearly it pays dividend to do ones homework!
+> 📝 **Note:** If you feel like you've seen exactly such a technique being used before, it's likely because you completed one of the many great [PortSwigger Web Security Academy Lab](https://portswigger.net/web-security/cross-site-scripting/exploiting/lab-stealing-cookies#:~:text=Submit%20the%20following,public%20Collaborator%20server) scenarios - clearly it pays dividends to do one's homework!
 
 Admittedly, the interaction required was quite high ie. two clicks by the victim + some persuasion to visit the diagram in the first place.
 
@@ -281,7 +282,7 @@ Soon after having received my first 🎉 [Nice catch!](https://youtu.be/IoXiXlCN
 
 The reasoning behind was simple - **what if I could access diagrams of other users?**
 
-I knew from the end-user flow that functionality seemed to have relied on some kind of [UUIDs](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html#uuids-and-guids) ie. uniqueness & sufficiently high entropy making the attempt to enumerate objects computationally infeasable.
+I knew from the end-user flow that functionality seemed to have relied on some kind of [UUIDs](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html#uuids-and-guids) ie. uniqueness & sufficiently high entropy making the attempt to enumerate objects computationally infeasible.
 
 Some examples:
 * _https://googlecloudcheatsheet.withgoogle.com/architecture?link=588e8130-892a-11ee-8127-114320374db6_
@@ -322,7 +323,7 @@ It's basically a wrapper over the foundational Google Cloud API ie. Google Cloud
 
 From access controls perspective, usage of [Cloud Storage for Firebase](https://firebase.google.com/docs/storage) introduced an alternative mechanism to handle AuthN/AuthZ other than [Cloud IAM](https://cloud.google.com/storage/docs/access-control/iam) & [ACLs](https://cloud.google.com/storage/docs/access-control/lists).
 
-[Firebase Security Rules](https://firebase.google.com/docs/rules) offer a very elegant, customizable solutiuon for handling AuthN/AuthZ.
+[Firebase Security Rules](https://firebase.google.com/docs/rules) offer a very elegant, customizable solution for handling AuthN/AuthZ.
 
 > Here's a short primer from [Fireship](https://www.youtube.com/@Fireship)\
 [Firebase Security in 100 Seconds](https://youtu.be/sw1Uy3zwsLs)
@@ -363,7 +364,7 @@ Those contained [PII](https://www.dol.gov/general/ppii) & [Intellectual Property
 </a>
 </p>
 
-> 📝 **Note:** If only had I known that a simple partially url-encoded GET request would work as well…
+> 📝 **Note:** If only I had known that a simple partially url-encoded GET request would work as well…
 https://firebasestorage.googleapis.com/v0/b/sustained-racer-323200.appspot.com/o?prefix=sharedLinks%2F&delimiter=%2F
 
 ---
@@ -383,7 +384,7 @@ Slightly simplified diagram showcasing the mitigation attempt.
 </a>
 </p>
 
-Having taken a look at the adjusted code responsible for the share link generation I asked myslef a following question:\
+Having taken a look at the adjusted code responsible for the share link generation I asked myself a following question:\
 what if sanitization takes place only on the client-side & and there’s **no check on the server-side**? 🤔
 
 ```js
@@ -444,7 +445,7 @@ curl 'https://us-east1-sustained-racer-323200.cloudfunctions.net/adt-backend-gcs
 </a>
 </p>
 
-In the meantime **impact has increased** from gaining read-only to full GCP IAM permissions of the victim, due to the fact that the application now expects the `cloud-platform` OAuth Scope to be granted (broadest one there is when it comes to GCP APIs)
+In the meantime **impact has increased** from gaining read-only to full GCP IAM permissions of the victim, due to the fact that the application now expects the **_cloud-platform_** OAuth Scope to be granted (broadest one there is when it comes to GCP APIs)
 
 [OAuth Choose Account Link](https://accounts.google.com/o/oauth2/v2/auth/oauthchooseaccount?gsiwebsdk=3&client_id=255437329003-lvuu51v6jt8u43ee3u3r5opb33dk39jp.apps.googleusercontent.com&scope=openid%20profile%20email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&redirect_uri=storagerelay%3A%2F%2Fhttps%2Fgooglecloudcheatsheet.withgoogle.com%3Fid%3Dauth612636&prompt=select_account&response_type=token&include_granted_scopes=true&enable_granular_consent=true&service=lso&o2v=2&theme=mn&ddm=0&flowName=GeneralOAuthFlow)
 (still online)
@@ -472,7 +473,7 @@ What if an attacker could overwrite those objects?
 </p>
 
 ## Benevolent injection
-For the PoC, I decided to pick the `GCE Simple` diagram since it contained [Managed Instance Group](https://cloud.google.com/compute/docs/instance-groups#managed_instance_groups), where a user can set a [startup script](https://cloud.google.com/compute/docs/instances/startup-scripts/linux)
+For the PoC, I decided to pick the _GCE Simple_ diagram since it contained [Managed Instance Group](https://cloud.google.com/compute/docs/instance-groups#managed_instance_groups), where a user can set a [startup script](https://cloud.google.com/compute/docs/instances/startup-scripts/linux)
 ```bash
 curl -s https://firebasestorage.googleapis.com/v0/b/sustained-racer-323200.appspot.com/o/deployableArchs%2Fdf0442d0-dc56-11ed-908f-b73d0485deaf%2FresourcesData.json\?alt\=media | gron | grep 'metadata'
 json[4][1].block.attributes.metadata_script = {};
@@ -552,7 +553,7 @@ One of the projects contained the entire source code, both backend as well as fr
 </a>
 </p>
 
-Anonymous [^4] user could’ve read and `git clone` all repositories from:
+Anonymous [^4] user could’ve read and _git clone_ all repositories from:
  - [https://atc-team.googlesource.com](https://atc-team.googlesource.com)
 
 One could’ve also read all the git commit messages, comments etc.:
@@ -563,7 +564,7 @@ I was able to track changes meant to mitigate / fix issues I reported:
  - [https://atc-team-review.googlesource.com/c/google-4-words/+/8280/1/hooks/useArchitecture.tsx](https://atc-team-review.googlesource.com/c/google-4-words/+/8280/1/hooks/useArchitecture.tsx)
  - [https://atc-team-review.googlesource.com/c/adt-terraform/+/8220](https://atc-team-review.googlesource.com/c/adt-terraform/+/8220)
 
- > After some back & forth access got restricted, so expect a `403: Forbidden` if you're not a Googler
+ > After some back & forth access got restricted, so expect a **_403: Forbidden_** if you're not a Googler
 
 ---
 
@@ -573,7 +574,7 @@ This is the finding that I’m most proud of - it's a variant of a bucket path t
 > Similiar scenario found by [Frans Rosén](https://twitter.com/fransrosen) back in 2018 [^5][^6]
 
 ## Generate Terraform feature
-As foreshadowed in the [Unplanned Bug Bounty hunt](#unplanned-bug-bounty-hunt) section of this writeup version `0.2.3` introduced a new feature.
+As foreshadowed in the [Unplanned Bug Bounty hunt](#unplanned-bug-bounty-hunt) section of this writeup version ==0.2.3== introduced a new feature.
 
 **TL;DR One could quickly deploy all the resources from a given diagram via a backend conversion from the proprietary Excalidraw schema to valid Terraform HCL files.**
 
@@ -663,7 +664,7 @@ Below is the recording which I sent to the Google VRP Team:
 
 The reported attack scenario was a breach of a significant security boundary and eventually got classified as `"unrestricted file system or database access"`
 
-> Careful reader probably realized that this vulnerability was introdcuded alongside the mitigation desribed in [Surprising bypass](#surprising-bypass) - it didn't exist beforehand (!)
+> Careful reader probably realized that this vulnerability was introducded alongside the mitigation desribed in [Surprising bypass](#surprising-bypass) - it didn't exist beforehand (!)
 
 ## Stumbling on an N-day in Go Cloud Storage client library
 While I initially pointed the blame to classic AppSec shortcomings (mostly lack of input validation) it soon occured to me that the **client library itself should've prevented this attack scenario**.
@@ -747,3 +748,11 @@ Oct XY, 2024: Silently EOL-ed 🪦
 [^6]: [BBRE videoblog](https://youtu.be/AQ-iEqdepA4) describing the by [Grzegorz Niedziela aka gregxsunday](https://twitter.com/gregxsunday)
 [^7]: In my opinion Web App pentests of client-side heavy, modern [SPAs](https://developer.mozilla.org/en-US/docs/Glossary/SPA) isn't really [black-box](https://www.checkpoint.com/cyber-hub/cyber-security/what-is-penetration-testing/what-is-black-box-testing/) due to the simple fact that a significant portion of the business logic is exposed
 [^8]: This is the default value of [max-keys](https://cloud.google.com/storage/docs/xml-api/reference-headers#maxkeys) and was a limitation which I was not able to bypass (could not add any query paramters)
+
+<script src="https://utteranc.es/client.js"
+repo="jdomeracki/jdomeracki.github.io"
+issue-term="pathname"
+theme="github-dark"
+crossorigin="anonymous"
+async>
+</script>
